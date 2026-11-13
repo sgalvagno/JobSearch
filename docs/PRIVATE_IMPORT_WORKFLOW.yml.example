@@ -1,0 +1,40 @@
+# Copy ONLY to the private data repository as .github/workflows/import.yml.
+# Required secrets: JOBSEARCH_IMPORT_URL (full HTTPS /api/v1/imports URL), JOBSEARCH_IMPORT_TOKEN.
+name: Import collected results
+on:
+  push:
+    branches: [main]
+    paths: ['imports/recherches/*.json']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: jobsearch-import
+  cancel-in-progress: false
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Send batches (safe to replay)
+        env:
+          IMPORT_URL: ${{ secrets.JOBSEARCH_IMPORT_URL }}
+          IMPORT_TOKEN: ${{ secrets.JOBSEARCH_IMPORT_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$IMPORT_URL" == https://* ]] || { echo 'HTTPS import URL required'; exit 1; }
+          shopt -s nullglob
+          for file in imports/recherches/*.json; do
+            jq -e 'type == "object" and .schema_version == 1' "$file" > /dev/null
+            echo "Importing $file"
+            curl --fail-with-body --silent --show-error --proto '=https' \
+              --connect-timeout 15 --max-time 120 \
+              --request POST "$IMPORT_URL" \
+              --header "Authorization: Bearer $IMPORT_TOKEN" \
+              --header 'Content-Type: application/json' \
+              --data-binary "@$file"
+            printf '\n'
+          done

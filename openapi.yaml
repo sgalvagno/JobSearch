@@ -1,0 +1,430 @@
+openapi: 3.1.0
+info:
+  title: JobSearch API
+  version: 0.1.0
+  description: |
+    Private single-user API. All endpoints require a bearer token.
+    Scopes: data:read for GET, data:write for mutations, imports:write for imports, * for administration.
+    Datetimes in database fields use YYYY-MM-DD HH:MM:SS in UTC. Batch collected_at is metadata and may use RFC3339.
+    Initial import is atomic and insert-only; existing source matches are ignored, never overwritten.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local Docker only; production requires HTTPS
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      responses:
+        '200': {description: Database accessible}
+  /offers:
+    get:
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PerPage'}
+        - {name: status, in: query, schema: {type: string, enum: [unknown, active, expired, closed]}}
+        - {name: visibility, in: query, schema: {type: string, enum: [normal, deprioritized, excluded, all], default: normal}}
+        - {name: favorite, in: query, schema: {type: boolean}}
+        - {name: city, in: query, schema: {type: string}}
+        - {name: company_id, in: query, schema: {type: integer}}
+      responses:
+        '200': {$ref: '#/components/responses/List'}
+    post:
+      requestBody: {$ref: '#/components/requestBodies/Offer'}
+      responses:
+        '201': {$ref: '#/components/responses/Id'}
+  /offers/{id}:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      responses:
+        '200': {description: Offer record}
+        '404': {$ref: '#/components/responses/Error'}
+    patch:
+      requestBody: {$ref: '#/components/requestBodies/OfferPatch'}
+      responses:
+        '200': {$ref: '#/components/responses/Id'}
+    delete:
+      responses:
+        '200': {description: Soft deleted; sources and applications retained}
+  /offers/{id}/favorite:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    put:
+      responses:
+        '200': {description: Favorite enabled}
+    delete:
+      responses:
+        '200': {description: Favorite disabled}
+  /offers/{id}/tracking:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      responses:
+        '200': {description: Personal tracking record}
+    patch:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                viewed_at: {type: [string, 'null']}
+                dismissed_at: {type: [string, 'null']}
+                dismiss_reason: {type: [string, 'null']}
+                personal_notes: {type: [string, 'null']}
+      responses:
+        '200': {description: Updated}
+  /companies:
+    get:
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PerPage'}
+        - {name: city, in: query, schema: {type: string}}
+        - {name: company_type, in: query, schema: {type: string}}
+      responses:
+        '200': {$ref: '#/components/responses/List'}
+    post:
+      requestBody: {$ref: '#/components/requestBodies/Company'}
+      responses:
+        '201': {$ref: '#/components/responses/Id'}
+  /companies/{id}:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      responses:
+        '200': {description: Company record}
+    patch:
+      requestBody: {$ref: '#/components/requestBodies/CompanyPatch'}
+      responses:
+        '200': {$ref: '#/components/responses/Id'}
+  /companies/{id}/preferences:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      responses:
+        '200': {description: Preferences or defaults}
+    put:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [visibility, interest_level]
+              properties:
+                visibility: {type: string, enum: [normal, deprioritized, excluded]}
+                interest_level: {type: string, enum: [preferred, neutral, low]}
+                reason: {type: [string, 'null']}
+                notes: {type: [string, 'null']}
+      responses:
+        '200': {description: Saved preferences}
+  /companies/{id}/contacts:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      responses:
+        '200': {description: Latest 100 non-deleted contacts}
+    post:
+      requestBody: {$ref: '#/components/requestBodies/Contact'}
+      responses:
+        '201': {$ref: '#/components/responses/Id'}
+  /companies/{id}/offers:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      responses:
+        '200': {description: Latest 100 offers belonging to employer, including expired offers; no preference filter}
+  /companies/{id}/applications:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      responses:
+        '200': {description: Latest 100 applications}
+  /contacts:
+    get:
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PerPage'}
+        - {name: company_id, in: query, schema: {type: integer}}
+      responses:
+        '200': {$ref: '#/components/responses/List'}
+    post:
+      requestBody: {$ref: '#/components/requestBodies/Contact'}
+      responses:
+        '201': {$ref: '#/components/responses/Id'}
+  /contacts/{id}:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      responses:
+        '200': {description: Contact record}
+    patch:
+      requestBody: {$ref: '#/components/requestBodies/Contact'}
+      responses:
+        '200': {$ref: '#/components/responses/Id'}
+    delete:
+      responses:
+        '200': {description: Soft deleted}
+  /applications:
+    get:
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PerPage'}
+        - {name: company_id, in: query, schema: {type: integer}}
+        - {name: status, in: query, schema: {type: string}}
+      responses:
+        '200': {$ref: '#/components/responses/List'}
+    post:
+      requestBody: {$ref: '#/components/requestBodies/Application'}
+      responses:
+        '201': {$ref: '#/components/responses/Id'}
+  /applications/{id}:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      responses:
+        '200': {description: Application record}
+    patch:
+      requestBody: {$ref: '#/components/requestBodies/Application'}
+      responses:
+        '200': {$ref: '#/components/responses/Id'}
+  /applications/{id}/events:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      responses:
+        '200': {description: Events ordered chronologically}
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [event_type, occurred_at]
+              properties:
+                event_type: {type: string}
+                occurred_at: {type: string, example: '2026-11-13 16:00:00'}
+                notes: {type: [string, 'null']}
+      responses:
+        '201': {$ref: '#/components/responses/Id'}
+  /follow-ups:
+    get:
+      responses:
+        '200': {description: Up to 100 due follow-ups for sent, acknowledged or interview applications}
+  /imports:
+    post:
+      description: |
+        Requires imports:write. Atomic insert-only import, max 2 MiB and 200 companies/200 offers.
+        Matching SIREN reuses company without updating; otherwise creates company (names/domains are not identity proofs).
+        Matching source URL hash or source_name/external_id ignores offer. No semantic merging or URL normalization.
+        No tracking, preference or application fields accepted. Same batch_id/content replays saved result.
+        JSON property ordering affects payload hash: replay the same serialized file unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [schema_version, batch_id, companies, offers]
+              properties:
+                schema_version: {const: 1}
+                batch_id: {type: string, pattern: '^[a-zA-Z0-9._-]{1,150}$'}
+                collected_at: {type: string}
+                search: {type: object}
+                companies:
+                  type: array
+                  maxItems: 200
+                  items:
+                    allOf:
+                      - {$ref: '#/components/schemas/CompanyFields'}
+                      - type: object
+                        required: [ref, name]
+                        properties:
+                          ref: {type: string}
+                offers:
+                  type: array
+                  maxItems: 200
+                  items:
+                    allOf:
+                      - {$ref: '#/components/schemas/OfferFields'}
+                      - type: object
+                        required: [title, source]
+                        properties:
+                          company_ref: {type: string}
+                          source:
+                            type: object
+                            additionalProperties: false
+                            required: [source_name, source_url]
+                            properties:
+                              source_name: {type: string}
+                              external_id: {type: [string, 'null']}
+                              source_url: {type: string, format: uri}
+      responses:
+        '200': {description: Batch result including created/ignored counts and offer IDs}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, description: Opaque token; not JWT}
+  parameters:
+    Id: {name: id, in: path, required: true, schema: {type: integer, minimum: 1}}
+    Page: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+    PerPage: {name: per_page, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
+  responses:
+    Id:
+      description: Record identifier
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              id: {type: integer}
+    List:
+      description: Paginated records
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: {type: array, items: {type: object}}
+              page: {type: integer}
+              per_page: {type: integer}
+              total: {type: integer}
+    Error:
+      description: JSON error. Common statuses 400 HTTPS required, 401 missing/invalid token, 403 scope, 404 missing, 405 method, 409 constraint/batch conflict, 413 size, 415 content type, 422 input, 500 internal.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: {type: string}
+              request_id: {type: string}
+  requestBodies:
+    Company:
+      required: true
+      content:
+        application/json:
+          schema:
+            allOf:
+              - {$ref: '#/components/schemas/CompanyFields'}
+              - {required: [name]}
+    CompanyPatch:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CompanyFields'}
+    Offer:
+      required: true
+      content:
+        application/json:
+          schema:
+            allOf:
+              - {$ref: '#/components/schemas/OfferFields'}
+              - {required: [title]}
+    OfferPatch:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/OfferFields'}
+    Contact:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ContactFields'}
+    Application:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApplicationFields'}
+  schemas:
+    CompanyFields:
+      type: object
+      properties:
+        name: {type: string, maxLength: 255}
+        legal_name: {type: [string, 'null']}
+        siren: {type: [string, 'null'], maxLength: 9}
+        website_url: {type: [string, 'null']}
+        domain: {type: [string, 'null']}
+        linkedin_url: {type: [string, 'null']}
+        company_type: {type: string, enum: [direct_employer, esn, recruitment_agency, unknown]}
+        industry: {type: [string, 'null']}
+        summary: {type: [string, 'null']}
+        presentation_text: {type: [string, 'null']}
+        presentation_source_url: {type: [string, 'null']}
+        presentation_collected_at: {type: [string, 'null']}
+        size_range: {type: [string, 'null']}
+        address_line: {type: [string, 'null']}
+        postal_code: {type: [string, 'null']}
+        city: {type: [string, 'null']}
+        country_code: {type: [string, 'null']}
+        latitude: {type: [number, 'null']}
+        longitude: {type: [number, 'null']}
+        contact_email: {type: [string, 'null']}
+        phone: {type: [string, 'null']}
+        careers_url: {type: [string, 'null']}
+        spontaneous_application_url: {type: [string, 'null']}
+        information_source_url: {type: [string, 'null']}
+        last_verified_at: {type: [string, 'null']}
+    OfferFields:
+      type: object
+      properties:
+        company_id: {type: [integer, 'null']}
+        recruiter_company_id: {type: [integer, 'null']}
+        title: {type: string, maxLength: 255}
+        description: {type: [string, 'null']}
+        requirements_text: {type: [string, 'null']}
+        benefits_text: {type: [string, 'null']}
+        contract_type: {type: [string, 'null']}
+        employment_type: {type: [string, 'null']}
+        location_text: {type: [string, 'null']}
+        city: {type: [string, 'null']}
+        postal_code: {type: [string, 'null']}
+        country_code: {type: [string, 'null']}
+        remote_policy: {type: string, enum: [unknown, onsite, hybrid, remote]}
+        remote_days_per_week: {type: [number, 'null']}
+        salary_min: {type: [number, 'null']}
+        salary_max: {type: [number, 'null']}
+        salary_currency: {type: [string, 'null']}
+        salary_period: {type: [string, 'null'], enum: [hour, month, year, null]}
+        experience_min_years: {type: [number, 'null']}
+        seniority: {type: [string, 'null']}
+        education_level: {type: [string, 'null']}
+        published_at: {type: [string, 'null']}
+        expires_at: {type: [string, 'null']}
+        first_seen_at: {type: [string, 'null']}
+        last_seen_at: {type: [string, 'null']}
+        last_checked_at: {type: [string, 'null']}
+        status: {type: string, enum: [unknown, active, expired, closed]}
+        status_reason: {type: [string, 'null']}
+        closed_at: {type: [string, 'null']}
+        application_url: {type: [string, 'null']}
+        application_email: {type: [string, 'null']}
+        review_status: {type: string, enum: [pending, verified, rejected]}
+        data_confidence: {type: [number, 'null'], minimum: 0, maximum: 1}
+    ContactFields:
+      type: object
+      properties:
+        company_id: {type: integer}
+        first_name: {type: [string, 'null']}
+        last_name: {type: [string, 'null']}
+        job_title: {type: [string, 'null']}
+        department: {type: [string, 'null']}
+        email: {type: [string, 'null']}
+        phone: {type: [string, 'null']}
+        linkedin_url: {type: [string, 'null']}
+        profile_url: {type: [string, 'null']}
+        contact_type: {type: string, enum: [person, recruitment, general]}
+        source_url: {type: [string, 'null']}
+        verified_at: {type: [string, 'null']}
+        notes: {type: [string, 'null']}
+    ApplicationFields:
+      type: object
+      description: POST requires company_id/type, job_offer_id for job_offer, applied_at for non-draft status. PATCH merges existing state. Contacts and offers must belong to target company or recruiter.
+      properties:
+        company_id: {type: integer}
+        job_offer_id: {type: [integer, 'null']}
+        contact_id: {type: [integer, 'null']}
+        type: {type: string, enum: [job_offer, spontaneous]}
+        status: {type: string, enum: [draft, sent, acknowledged, interview, offer_received, rejected, withdrawn, no_response]}
+        channel: {type: [string, 'null']}
+        applied_at: {type: [string, 'null']}
+        next_follow_up_at: {type: [string, 'null']}
+        cv_reference: {type: [string, 'null']}
+        cover_letter_reference: {type: [string, 'null']}
+        notes: {type: [string, 'null']}

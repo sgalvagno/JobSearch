@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "batch_id": "example-001",
+  "collected_at": "2026-11-13T16:00:00Z",
+  "search": {"keywords": ["PHP", "Angular"], "location": "Aubagne"},
+  "companies": [
+    {
+      "ref": "example",
+      "name": "Entreprise fictive",
+      "company_type": "direct_employer",
+      "summary": "Exemple fictif pour tester l'import.",
+      "presentation_text": "Nous développons des logiciels métiers.",
+      "presentation_source_url": "https://example.org/about",
+      "presentation_collected_at": "2026-11-13 16:00:00"
+    }
+  ],
+  "offers": [
+    {
+      "company_ref": "example",
+      "title": "Développeur PHP — exemple fictif",
+      "city": "Aubagne",
+      "status": "active",
+      "source": {
+        "source_name": "example",
+        "external_id": "example-job-001",
+        "source_url": "https://example.org/jobs/001"
+      }
+    }
+  ]
+}

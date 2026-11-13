@@ -1,0 +1,39 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: PHP syntax
+        run: docker run --rm -v "$PWD:/app" -w /app php:8.3-cli sh -c 'find src public bin -name "*.php" -exec php -l {} \; | tee /tmp/lint; ! grep -q "Errors parsing" /tmp/lint'
+      - name: Start database and API
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait
+      - name: API smoke tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          output=$(docker compose exec -T api php bin/token.php ci '*')
+          token=$(printf '%s\n' "$output" | sed -n 's/^Secret (shown once): //p')
+          base=http://127.0.0.1:8080/api/v1
+          curl --retry 10 --retry-connrefused --retry-delay 2 -fsS -H "Authorization: Bearer $token" "$base/health"
+          [[ $(curl -s -o /dev/null -w '%{http_code}' "$base/offers") == 401 ]]
+          first=$(curl -fsS -H "Authorization: Bearer $token" -H 'Content-Type: application/json' --data-binary @examples/batch.json "$base/imports")
+          second=$(curl -fsS -H "Authorization: Bearer $token" -H 'Content-Type: application/json' --data-binary @examples/batch.json "$base/imports")
+          [[ "$first" == "$second" ]]
+          id=$(printf '%s' "$first" | jq -r '.items[0].id')
+          curl -fsS -X PUT -H "Authorization: Bearer $token" "$base/offers/$id/favorite"
+          curl -fsS -H "Authorization: Bearer $token" "$base/offers?favorite=true" | jq -e '.total == 1'
+          docker compose exec -T api php bin/token.php collector imports:write > /tmp/collector
+          collector=$(sed -n 's/^Secret (shown once): //p' /tmp/collector)
+          [[ $(curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: Bearer $collector" "$base/offers/$id") == 403 ]]
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Stop
+        if: always()
+        run: docker compose down -v
